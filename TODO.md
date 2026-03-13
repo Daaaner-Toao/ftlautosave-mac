@@ -1,27 +1,36 @@
 # TODO
 
-## High Priority
+## Completed
 
-- [ ] **Start/Stop/Continue Watcher Buttons** - Add buttons to manually control the file watcher
-  - Start watching button
-  - Stop watching button  
-  - Show current watcher state clearly
+- [x] **Snapshot Restore** - Restore snapshots to current save files
+  - Backend: `BackupManager.restore_snapshot()` in backup_manager.py
+  - GUI: "Restore Selected" button with confirmation dialog
+  - Warning to ensure FTL is in main menu before restoring
+  - Stops watcher during restore, restarts after
 
-- [ ] **Fix Save File Parser** - The parser currently fails on some save files
-  - Debug why `ae_prof.sav` shows as invalid
-  - Test with actual `continue.sav` files
-  - Add better error handling and fallback parsing
+- [x] **Start/Stop Watcher Buttons** - Manual control for file watcher
+  - Start button (▶ Start) - starts watching
+  - Stop button (■ Stop) - stops watching
+  - Button states update based on watcher status
+  - Status indicator (●) shows current state
 
-- [ ] **Configuration UI** - Add a settings panel for important options
-  - Watch interval
-  - Max snapshots
-  - Auto-purge toggle
+- [x] **Fix Save File Parser** - Parser now handles both save types correctly
+  - Profile files (ae_prof.sav, prof.sav) are detected and marked as `is_profile=True`
+  - Save files (continue.sav) are parsed with robust resource detection
+  - Resources are found by scanning for valid patterns instead of fixed offsets
+  - Better error handling with fallback values
+
+- [x] **Configuration UI** - Settings dialog for all options
+  - Watch interval, Max snapshots
+  - Limit backups, Auto-update snapshots
+  - Auto-start FTL
   - Save file names (for mods)
 
-- [ ] **Mac App Bundle** - Create a proper `.app` bundle for easy launching
-  - Use `py2app` or similar
-  - Include icon
-  - Double-click to start
+- [x] **Mac App Bundle** - Standalone `.app` bundle
+  - Created with py2app
+  - Size: ~25MB
+  - Build: `python setup.py py2app`
+  - Output: `dist/FTL Autosave.app`
 
 ## Medium Priority
 

@@ -57,11 +57,36 @@ class FtlAutosaveApp:
         status_frame = ttk.LabelFrame(main_frame, text="Status", padding="5")
         status_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.status_label = ttk.Label(status_frame, text="Initializing...")
+        # Status text and indicator
+        status_left = ttk.Frame(status_frame)
+        status_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.watching_label = ttk.Label(status_left, text="●", foreground="gray")
+        self.watching_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.status_label = ttk.Label(status_left, text="Initializing...")
         self.status_label.pack(side=tk.LEFT)
         
-        self.watching_label = ttk.Label(status_frame, text="●", foreground="gray")
-        self.watching_label.pack(side=tk.RIGHT)
+        # Watcher control buttons
+        button_frame = ttk.Frame(status_frame)
+        button_frame.pack(side=tk.RIGHT)
+        
+        self.start_btn = ttk.Button(
+            button_frame,
+            text="▶ Start",
+            command=self._start_watcher_ui,
+            width=10
+        )
+        self.start_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.stop_btn = ttk.Button(
+            button_frame,
+            text="■ Stop",
+            command=self._stop_watcher_ui,
+            width=10,
+            state='disabled'
+        )
+        self.stop_btn.pack(side=tk.LEFT)
         
         # Path configuration
         path_frame = ttk.LabelFrame(main_frame, text="FTL Save Path", padding="5")
@@ -142,6 +167,14 @@ class FtlAutosaveApp:
         )
         refresh_btn.pack(side=tk.LEFT, padx=(0, 5))
         
+        # Settings button
+        settings_btn = ttk.Button(
+            button_frame,
+            text="⚙ Settings",
+            command=self._show_settings
+        )
+        settings_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
         # Create backup manually button
         backup_btn = ttk.Button(
             button_frame,
@@ -159,10 +192,13 @@ class FtlAutosaveApp:
         if save_path.exists():
             if savefile.exists():
                 self.path_status.config(text="✓ Save path valid, save file found", foreground="green")
+                self._update_watcher_buttons(running=self.watcher is not None, path_valid=True)
             else:
                 self.path_status.config(text="⚠ Save path valid, but no save file found", foreground="orange")
+                self._update_watcher_buttons(running=self.watcher is not None, path_valid=True)
         else:
             self.path_status.config(text="✗ Save path does not exist", foreground="red")
+            self._update_watcher_buttons(running=False, path_valid=False)
     
     def _browse_path(self):
         """Browse for FTL save directory"""
@@ -187,6 +223,7 @@ class FtlAutosaveApp:
         if not Path(self.config.ftl_save_path).exists():
             self.status_label.config(text="Save path not found - waiting...")
             self.watching_label.config(foreground="red")
+            self._update_watcher_buttons(running=False, path_valid=False)
             return
         
         self.watcher = FtlSaveWatcher(
@@ -198,6 +235,7 @@ class FtlAutosaveApp:
         
         self.status_label.config(text="Watching for changes...")
         self.watching_label.config(foreground="green")
+        self._update_watcher_buttons(running=True)
     
     def _stop_watcher(self):
         """Stop the file watcher"""
@@ -207,6 +245,24 @@ class FtlAutosaveApp:
         
         self.status_label.config(text="Stopped")
         self.watching_label.config(foreground="gray")
+        self._update_watcher_buttons(running=False)
+    
+    def _start_watcher_ui(self):
+        """Start watcher from UI button"""
+        self._start_watcher()
+    
+    def _stop_watcher_ui(self):
+        """Stop watcher from UI button"""
+        self._stop_watcher()
+    
+    def _update_watcher_buttons(self, running: bool, path_valid: bool = True):
+        """Update watcher control button states"""
+        if running:
+            self.start_btn.config(state='disabled')
+            self.stop_btn.config(state='normal')
+        else:
+            self.start_btn.config(state='normal' if path_valid else 'disabled')
+            self.stop_btn.config(state='disabled')
     
     def _on_backup_created(self):
         """Called when a backup is created"""
@@ -215,6 +271,10 @@ class FtlAutosaveApp:
     
     def _refresh_snapshots(self):
         """Refresh the snapshot list"""
+        # Remember current selection
+        current_selection = self.snapshot_list.curselection()
+        selected_index = current_selection[0] if current_selection else None
+        
         # Clear current list
         self.snapshot_list.delete(0, tk.END)
         
@@ -229,8 +289,13 @@ class FtlAutosaveApp:
         count = len(self._snapshots)
         self.snapshot_count.config(text=f"{count} snapshot{'s' if count != 1 else ''}")
         
-        # Clear details
-        self._clear_details()
+        # Restore selection if possible
+        if selected_index is not None and selected_index < len(self._snapshots):
+            self.snapshot_list.selection_set(selected_index)
+            self._on_snapshot_select(None)
+        else:
+            # Clear details
+            self._clear_details()
     
     def _schedule_refresh(self):
         """Schedule periodic refresh"""
@@ -280,17 +345,33 @@ class FtlAutosaveApp:
         index = selection[0]
         snapshot = self._snapshots[index]
         
-        # Confirm
-        if not messagebox.askyesno(
-            "Confirm Restore",
+        # Build confirmation message with snapshot details
+        details = snapshot.get_details()
+        confirm_msg = (
             f"Restore snapshot from {snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S')}?\n\n"
-            "Make sure FTL is in the main menu before restoring!"
-        ):
+            f"{details}\n\n"
+            "⚠ Make sure FTL is in the main menu before restoring!"
+        )
+        
+        # Confirm
+        if not messagebox.askyesno("Confirm Restore", confirm_msg):
             return
         
+        # Stop watcher before restore
+        was_watching = self.watcher is not None
+        if was_watching:
+            self._stop_watcher()
+        
         # Restore
-        if self.backup_manager.restore_snapshot(snapshot):
+        success = self.backup_manager.restore_snapshot(snapshot)
+        
+        # Restart watcher if it was running
+        if was_watching:
+            self._start_watcher()
+        
+        if success:
             messagebox.showinfo("Success", "Snapshot restored!\n\nYou can now continue your game in FTL.")
+            self._refresh_snapshots()
         else:
             messagebox.showerror("Error", "Failed to restore snapshot.")
     
@@ -327,6 +408,93 @@ class FtlAutosaveApp:
             messagebox.showinfo("Backup Created", f"Backup created: {snapshot.display_name}")
         else:
             messagebox.showerror("Error", "Failed to create backup. Check if save file exists.")
+    
+    def _show_settings(self):
+        """Show settings dialog"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Settings")
+        dialog.geometry("400x350")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Watch interval
+        ttk.Label(main_frame, text="Watch Interval (ms):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        watch_interval_var = tk.StringVar(value=str(self.config.watch_interval))
+        watch_interval_entry = ttk.Entry(main_frame, textvariable=watch_interval_var, width=15)
+        watch_interval_entry.grid(row=0, column=1, sticky=tk.W, pady=5)
+        
+        # Max snapshots
+        ttk.Label(main_frame, text="Max Snapshots:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        max_snapshots_var = tk.StringVar(value=str(self.config.max_snapshots))
+        max_snapshots_entry = ttk.Entry(main_frame, textvariable=max_snapshots_var, width=15)
+        max_snapshots_entry.grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        # Limit backups checkbox
+        limit_backups_var = tk.BooleanVar(value=self.config.limit_backup_saves)
+        limit_backups_cb = ttk.Checkbutton(main_frame, text="Limit backup saves", variable=limit_backups_var)
+        limit_backups_cb.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=5)
+        
+        # Auto-update snapshots checkbox
+        auto_update_var = tk.BooleanVar(value=self.config.auto_update_snapshots)
+        auto_update_cb = ttk.Checkbutton(main_frame, text="Auto-update snapshot list", variable=auto_update_var)
+        auto_update_cb.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
+        
+        # Auto-start FTL checkbox
+        auto_start_var = tk.BooleanVar(value=self.config.auto_start_ftl)
+        auto_start_cb = ttk.Checkbutton(main_frame, text="Auto-start FTL on launch", variable=auto_start_var)
+        auto_start_cb.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=5)
+        
+        # Separator
+        ttk.Separator(main_frame, orient=tk.HORIZONTAL).grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        # Save file names
+        ttk.Label(main_frame, text="Save File Name:").grid(row=6, column=0, sticky=tk.W, pady=5)
+        savefile_var = tk.StringVar(value=self.config.savefile)
+        savefile_entry = ttk.Entry(main_frame, textvariable=savefile_var, width=20)
+        savefile_entry.grid(row=6, column=1, sticky=tk.W, pady=5)
+        
+        ttk.Label(main_frame, text="Profile File Name:").grid(row=7, column=0, sticky=tk.W, pady=5)
+        profile_var = tk.StringVar(value=self.config.profile)
+        profile_entry = ttk.Entry(main_frame, textvariable=profile_var, width=20)
+        profile_entry.grid(row=7, column=1, sticky=tk.W, pady=5)
+        
+        # Info label
+        info_label = ttk.Label(main_frame, text="Note: Save file names are for mod compatibility", 
+                               foreground="gray")
+        info_label.grid(row=8, column=0, columnspan=2, sticky=tk.W, pady=5)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=9, column=0, columnspan=2, pady=15)
+        
+        def save_settings():
+            try:
+                self.config.watch_interval = int(watch_interval_var.get())
+                self.config.max_snapshots = int(max_snapshots_var.get())
+                self.config.limit_backup_saves = limit_backups_var.get()
+                self.config.auto_update_snapshots = auto_update_var.get()
+                self.config.auto_start_ftl = auto_start_var.get()
+                self.config.savefile = savefile_var.get()
+                self.config.profile = profile_var.get()
+                self.config.to_file()
+                dialog.destroy()
+                messagebox.showinfo("Settings Saved", "Settings have been saved.")
+            except ValueError as e:
+                messagebox.showerror("Error", f"Invalid value: {e}")
+        
+        ttk.Button(button_frame, text="Save", command=save_settings).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
     
     def _on_close(self):
         """Handle window close"""

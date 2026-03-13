@@ -32,6 +32,8 @@ class BackupSnapshot:
         """Generate display name for the snapshot"""
         time_str = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         if self.save_content and not self.save_content.invalid_file:
+            if self.save_content.is_profile:
+                return f"{time_str} - Profile Backup [v{self.save_content.version}]"
             modifier = f" ({self.save_content.save_modifier})" if self.save_content.save_modifier else ""
             return f"{time_str} - {self.save_content.shipname} [v{self.save_content.version}{modifier}]"
         return time_str
@@ -42,21 +44,28 @@ class BackupSnapshot:
         
         if self.save_content and not self.save_content.invalid_file:
             sc = self.save_content
-            lines.append(f"Ship: {sc.shipname} ({sc.shiptype})")
-            lines.append(f"Version: {sc.version}" + (f" ({sc.save_modifier})" if sc.save_modifier else ""))
-            lines.append("")
-            lines.append("Resources:")
-            lines.append(f"  Hull: {sc.hull}")
-            lines.append(f"  Fuel: {sc.fuel}")
-            lines.append(f"  Drone Parts: {sc.drone_parts}")
-            lines.append(f"  Missiles: {sc.missiles}")
-            lines.append(f"  Scrap: {sc.scrap}")
-            lines.append("")
-            lines.append("Stats:")
-            lines.append(f"  Ships Defeated: {sc.total_ships_defeated}")
-            lines.append(f"  Locations Explored: {sc.total_locations_explored}")
-            lines.append(f"  Scrap Collected: {sc.total_scrap_collected}")
-            lines.append(f"  Crew Obtained: {sc.total_crew_obtained}")
+            if sc.is_profile:
+                lines.append(f"Type: Achievement Profile")
+                lines.append(f"Version: {sc.version}")
+                lines.append("")
+                lines.append("(Profile files store achievements and unlocks,")
+                lines.append("not game progress)")
+            else:
+                lines.append(f"Ship: {sc.shipname} ({sc.shiptype})")
+                lines.append(f"Version: {sc.version}" + (f" ({sc.save_modifier})" if sc.save_modifier else ""))
+                lines.append("")
+                lines.append("Resources:")
+                lines.append(f"  Hull: {sc.hull}")
+                lines.append(f"  Fuel: {sc.fuel}")
+                lines.append(f"  Drone Parts: {sc.drone_parts}")
+                lines.append(f"  Missiles: {sc.missiles}")
+                lines.append(f"  Scrap: {sc.scrap}")
+                lines.append("")
+                lines.append("Stats:")
+                lines.append(f"  Ships Defeated: {sc.total_ships_defeated}")
+                lines.append(f"  Locations Explored: {sc.total_locations_explored}")
+                lines.append(f"  Scrap Collected: {sc.total_scrap_collected}")
+                lines.append(f"  Crew Obtained: {sc.total_crew_obtained}")
         else:
             lines.append("(Save file could not be parsed)")
         

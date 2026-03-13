@@ -29,9 +29,15 @@ env/
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
 
 # OS
 .DS_Store
