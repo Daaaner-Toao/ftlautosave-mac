@@ -48,6 +48,14 @@
   - Example: "13.03.2026, 02:05, Sektor ---, Kestrel Cruiser - Hülle: 15"
   - Sector extraction not yet implemented (shows "---")
 
+- [x] **Live-Value Editing** - Edit resources directly in the save file
+  - Editable fields for Hull, Fuel, Missiles, Drone Parts, Scrap
+  - "Apply Changes" button with confirmation dialog
+  - Warning: FTL must be in main menu before applying changes
+  - Automatic backup before applying changes
+  - Resource offset detection fixed (now finds correct offset at 0xF3)
+  - Validation of value ranges (Hull: 1-30, Fuel: 0-100, etc.)
+
 ## Medium Priority
 
 - [ ] **Auto-start FTL** - Option to launch FTL when starting the app

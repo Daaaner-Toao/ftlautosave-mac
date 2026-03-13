@@ -33,13 +33,37 @@ brew install python-tk@3.11
 
 ## Running
 
-### Option 1: Direct with Python
+### Option 1: Using Makefile (Recommended)
+
+The project includes a Makefile with all common commands:
+
+```bash
+# Show all available commands
+make help
+
+# Start the application
+make run
+
+# Stop any running instance
+make stop
+
+# Build Mac App Bundle
+make build
+
+# Install to /Applications
+make install
+
+# Commit changes
+make commit MSG='Your commit message'
+```
+
+### Option 2: Direct with Python
 
 ```bash
 /opt/homebrew/bin/python3.11 run_ftlautosave.py
 ```
 
-### Option 2: Build Mac App Bundle
+### Option 3: Build Mac App Bundle Manually
 
 Create a standalone `.app` that you can put in your Applications folder:
 
@@ -57,6 +81,25 @@ Create a standalone `.app` that you can put in your Applications folder:
 You can then copy `dist/FTL Autosave.app` to your Applications folder.
 
 **Note:** The build process will show some warnings about Windows modules not found - this is normal for macOS builds and can be ignored.
+
+## Makefile Commands
+
+| Command | Description |
+|---------|-------------|
+| `make run` | Start the application (development mode) |
+| `make run-fg` | Start in foreground (for debugging) |
+| `make stop` | Stop any running instance |
+| `make build` | Build the Mac App Bundle |
+| `make clean` | Remove all generated files |
+| `make install` | Build and install to /Applications |
+| `make uninstall` | Remove from /Applications |
+| `make test` | Run tests |
+| `make lint` | Run code linter |
+| `make format` | Format code with black |
+| `make status` | Show git status |
+| `make commit MSG='msg'` | Stage and commit all changes |
+| `make push` | Push to remote |
+| `make help` | Show all commands |
 
 ## How to Use
 
@@ -84,12 +127,32 @@ The main window shows:
 **Right Panel:**
 - Current game values (updated every 3 seconds):
   - Ship name and type
-  - Hull
-  - Fuel
-  - Missiles
-  - Drone Parts
-  - Scrap
+  - Hull (editable)
+  - Fuel (editable)
+  - Missiles (editable)
+  - Drone Parts (editable)
+  - Scrap (editable)
   - Sector (not yet implemented)
+- "Apply Changes" button to write edited values to save file
+
+### Live-Value Editing
+
+You can edit game resources directly in the save file:
+
+1. Make sure FTL is in the **main menu** (not running a game)
+2. Edit the values in the right panel (Hull, Fuel, Missiles, Drone Parts, Scrap)
+3. Click "Apply Changes"
+4. Confirm the dialog
+5. Continue your game in FTL
+
+**Value Ranges:**
+- Hull: 1-30
+- Fuel: 0-100
+- Missiles: 0-50
+- Drone Parts: 0-50
+- Scrap: 0-2000
+
+**Warning:** If FTL is running a game when you apply changes, the game will overwrite your changes when it saves.
 
 ## Where Are My Saves?
 

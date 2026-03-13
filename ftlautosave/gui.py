@@ -83,11 +83,18 @@ class FtlAutosaveApp:
         button_frame = ttk.Frame(status_frame)
         button_frame.pack(side=tk.RIGHT)
         
+        # Configure style for highlighted buttons
+        style = ttk.Style()
+        style.configure('Green.TButton', foreground='green')
+        style.configure('Red.TButton', foreground='red')
+        style.configure('Disabled.TButton', foreground='gray')
+        
         self.start_btn = ttk.Button(
             button_frame,
             text="▶ Start",
             command=self._start_watcher_ui,
-            width=10
+            width=10,
+            style='Green.TButton'
         )
         self.start_btn.pack(side=tk.LEFT, padx=(0, 5))
         
@@ -96,6 +103,7 @@ class FtlAutosaveApp:
             text="■ Stop",
             command=self._stop_watcher_ui,
             width=10,
+            style='Red.TButton',
             state='disabled'
         )
         self.stop_btn.pack(side=tk.LEFT)
@@ -206,43 +214,48 @@ class FtlAutosaveApp:
         # Separator
         ttk.Separator(current_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(0, 10))
         
-        # Hull
+        # Hull - editable
         hull_frame = ttk.Frame(current_frame)
         hull_frame.pack(fill=tk.X, pady=5)
         ttk.Label(hull_frame, text="🛡 Hull:", font=("Helvetica", 11)).pack(side=tk.LEFT)
-        self.current_hull_label = ttk.Label(hull_frame, text="---/---", font=("Monaco", 11, "bold"))
-        self.current_hull_label.pack(side=tk.RIGHT)
+        self.current_hull_var = tk.StringVar(value="---")
+        self.current_hull_entry = ttk.Entry(hull_frame, textvariable=self.current_hull_var, width=8, justify='right')
+        self.current_hull_entry.pack(side=tk.RIGHT)
         
-        # Fuel (Energy)
+        # Fuel - editable
         fuel_frame = ttk.Frame(current_frame)
         fuel_frame.pack(fill=tk.X, pady=5)
         ttk.Label(fuel_frame, text="⚡ Fuel:", font=("Helvetica", 11)).pack(side=tk.LEFT)
-        self.current_fuel_label = ttk.Label(fuel_frame, text="---", font=("Monaco", 11, "bold"))
-        self.current_fuel_label.pack(side=tk.RIGHT)
+        self.current_fuel_var = tk.StringVar(value="---")
+        self.current_fuel_entry = ttk.Entry(fuel_frame, textvariable=self.current_fuel_var, width=8, justify='right')
+        self.current_fuel_entry.pack(side=tk.RIGHT)
         
-        # Missiles
+        # Missiles - editable
         missiles_frame = ttk.Frame(current_frame)
         missiles_frame.pack(fill=tk.X, pady=5)
         ttk.Label(missiles_frame, text="🚀 Missiles:", font=("Helvetica", 11)).pack(side=tk.LEFT)
-        self.current_missiles_label = ttk.Label(missiles_frame, text="---", font=("Monaco", 11, "bold"))
-        self.current_missiles_label.pack(side=tk.RIGHT)
+        self.current_missiles_var = tk.StringVar(value="---")
+        self.current_missiles_entry = ttk.Entry(missiles_frame, textvariable=self.current_missiles_var, width=8, justify='right')
+        self.current_missiles_entry.pack(side=tk.RIGHT)
         
-        # Drone Parts
+        # Drone Parts - editable
         drones_frame = ttk.Frame(current_frame)
         drones_frame.pack(fill=tk.X, pady=5)
         ttk.Label(drones_frame, text="🤖 Drone Parts:", font=("Helvetica", 11)).pack(side=tk.LEFT)
-        self.current_drones_label = ttk.Label(drones_frame, text="---", font=("Monaco", 11, "bold"))
-        self.current_drones_label.pack(side=tk.RIGHT)
+        self.current_drones_var = tk.StringVar(value="---")
+        self.current_drones_entry = ttk.Entry(drones_frame, textvariable=self.current_drones_var, width=8, justify='right')
+        self.current_drones_entry.pack(side=tk.RIGHT)
         
         # Separator
         ttk.Separator(current_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         
-        # Scrap
+        # Scrap - editable
         scrap_frame = ttk.Frame(current_frame)
         scrap_frame.pack(fill=tk.X, pady=5)
         ttk.Label(scrap_frame, text="💰 Scrap:", font=("Helvetica", 11)).pack(side=tk.LEFT)
-        self.current_scrap_label = ttk.Label(scrap_frame, text="---", font=("Monaco", 11, "bold"))
-        self.current_scrap_label.pack(side=tk.RIGHT)
+        self.current_scrap_var = tk.StringVar(value="---")
+        self.current_scrap_entry = ttk.Entry(scrap_frame, textvariable=self.current_scrap_var, width=8, justify='right')
+        self.current_scrap_entry.pack(side=tk.RIGHT)
         
         # Sector (if available)
         sector_frame = ttk.Frame(current_frame)
@@ -255,6 +268,14 @@ class FtlAutosaveApp:
         ttk.Separator(current_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         self.current_updated_label = ttk.Label(current_frame, text="Last update: ---", font=("Helvetica", 9), foreground="gray")
         self.current_updated_label.pack(anchor=tk.W)
+        
+        # Apply Changes button
+        self.apply_btn = ttk.Button(
+            current_frame,
+            text="Apply Changes",
+            command=self._apply_value_changes
+        )
+        self.apply_btn.pack(fill=tk.X, pady=(10, 0))
         
         # Store right frame reference for updates
         self.right_frame = right_frame
@@ -284,16 +305,22 @@ class FtlAutosaveApp:
     
     def _update_current_values(self):
         """Update the current game values display"""
+        # Skip updating entry values if user is editing
+        if self._is_entry_focused():
+            # Only update timestamp
+            self.current_updated_label.config(text=f"Last update: {datetime.now().strftime('%H:%M:%S')} (editing)")
+            return
+        
         save_path = Path(self.config.ftl_save_path)
         savefile = save_path / self.config.savefile
         
         if not savefile.exists():
             self.current_ship_label.config(text="Ship: No save file")
-            self.current_hull_label.config(text="---/---")
-            self.current_fuel_label.config(text="---")
-            self.current_missiles_label.config(text="---")
-            self.current_drones_label.config(text="---")
-            self.current_scrap_label.config(text="---")
+            self.current_hull_var.set("---")
+            self.current_fuel_var.set("---")
+            self.current_missiles_var.set("---")
+            self.current_drones_var.set("---")
+            self.current_scrap_var.set("---")
             self.current_sector_label.config(text="---")
             self.current_updated_label.config(text="Last update: ---")
             return
@@ -303,11 +330,11 @@ class FtlAutosaveApp:
             
             if parsed.is_profile:
                 self.current_ship_label.config(text="Ship: Profile File")
-                self.current_hull_label.config(text="---/---")
-                self.current_fuel_label.config(text="---")
-                self.current_missiles_label.config(text="---")
-                self.current_drones_label.config(text="---")
-                self.current_scrap_label.config(text="---")
+                self.current_hull_var.set("---")
+                self.current_fuel_var.set("---")
+                self.current_missiles_var.set("---")
+                self.current_drones_var.set("---")
+                self.current_scrap_var.set("---")
                 self.current_sector_label.config(text="---")
             else:
                 # Ship name and type
@@ -316,21 +343,21 @@ class FtlAutosaveApp:
                 
                 # Hull
                 if parsed.hull is not None and parsed.hull > 0:
-                    self.current_hull_label.config(text=str(parsed.hull))
+                    self.current_hull_var.set(str(parsed.hull))
                 else:
-                    self.current_hull_label.config(text="---")
+                    self.current_hull_var.set("---")
                 
                 # Fuel
-                self.current_fuel_label.config(text=str(parsed.fuel) if parsed.fuel is not None else "---")
+                self.current_fuel_var.set(str(parsed.fuel) if parsed.fuel is not None else "---")
                 
                 # Missiles
-                self.current_missiles_label.config(text=str(parsed.missiles) if parsed.missiles is not None else "---")
+                self.current_missiles_var.set(str(parsed.missiles) if parsed.missiles is not None else "---")
                 
                 # Drone Parts
-                self.current_drones_label.config(text=str(parsed.drone_parts) if parsed.drone_parts is not None else "---")
+                self.current_drones_var.set(str(parsed.drone_parts) if parsed.drone_parts is not None else "---")
                 
                 # Scrap
-                self.current_scrap_label.config(text=str(parsed.scrap) if parsed.scrap is not None else "---")
+                self.current_scrap_var.set(str(parsed.scrap) if parsed.scrap is not None else "---")
                 
                 # Sector (not yet implemented in parser)
                 self.current_sector_label.config(text="---")
@@ -340,11 +367,11 @@ class FtlAutosaveApp:
             
         except Exception as e:
             self.current_ship_label.config(text="Ship: Error reading")
-            self.current_hull_label.config(text="---/---")
-            self.current_fuel_label.config(text="---")
-            self.current_missiles_label.config(text="---")
-            self.current_drones_label.config(text="---")
-            self.current_scrap_label.config(text="---")
+            self.current_hull_var.set("---")
+            self.current_fuel_var.set("---")
+            self.current_missiles_var.set("---")
+            self.current_drones_var.set("---")
+            self.current_scrap_var.set("---")
             self.current_sector_label.config(text="---")
             self.current_updated_label.config(text=f"Error: {str(e)[:20]}")
     
@@ -404,13 +431,14 @@ class FtlAutosaveApp:
         self._stop_watcher()
     
     def _update_watcher_buttons(self, running: bool, path_valid: bool = True):
-        """Update watcher control button states"""
+        """Update watcher control button states and styles"""
         if running:
-            self.start_btn.config(state='disabled')
-            self.stop_btn.config(state='normal')
+            self.start_btn.config(state='disabled', style='Disabled.TButton')
+            self.stop_btn.config(state='normal', style='Red.TButton')
         else:
-            self.start_btn.config(state='normal' if path_valid else 'disabled')
-            self.stop_btn.config(state='disabled')
+            self.start_btn.config(state='normal' if path_valid else 'disabled', 
+                                  style='Green.TButton' if path_valid else 'Disabled.TButton')
+            self.stop_btn.config(state='disabled', style='Disabled.TButton')
     
     def _on_backup_created(self):
         """Called when a backup is created"""
@@ -450,11 +478,23 @@ class FtlAutosaveApp:
         if self.config.auto_update_snapshots:
             self._refresh_snapshots()
         
-        # Update current values display
+        # Update current values display (only if no entry is focused)
         self._update_current_values()
         
         # Schedule next refresh
         self.root.after(3000, self._schedule_refresh)
+    
+    def _is_entry_focused(self) -> bool:
+        """Check if any of the value entry fields is currently focused"""
+        focused_widget = self.root.focus_get()
+        entry_widgets = [
+            self.current_hull_entry,
+            self.current_fuel_entry,
+            self.current_missiles_entry,
+            self.current_drones_entry,
+            self.current_scrap_entry
+        ]
+        return focused_widget in entry_widgets
     
     def _on_snapshot_select(self, event):
         """Handle snapshot selection"""
@@ -646,6 +686,92 @@ class FtlAutosaveApp:
         
         ttk.Button(button_frame, text="Save", command=save_settings).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+    
+    def _apply_value_changes(self):
+        """Apply changes to the current save file"""
+        save_path = Path(self.config.ftl_save_path)
+        savefile = save_path / self.config.savefile
+        
+        if not savefile.exists():
+            messagebox.showerror("Error", "No save file found.")
+            return
+        
+        # Parse current values
+        try:
+            hull = int(self.current_hull_var.get()) if self.current_hull_var.get() != "---" else None
+            fuel = int(self.current_fuel_var.get()) if self.current_fuel_var.get() != "---" else None
+            missiles = int(self.current_missiles_var.get()) if self.current_missiles_var.get() != "---" else None
+            drones = int(self.current_drones_var.get()) if self.current_drones_var.get() != "---" else None
+            scrap = int(self.current_scrap_var.get()) if self.current_scrap_var.get() != "---" else None
+        except ValueError:
+            messagebox.showerror("Error", "Invalid value format. Please enter numbers only.")
+            return
+        
+        # Validate ranges
+        errors = []
+        if hull is not None and not (1 <= hull <= 30):
+            errors.append("Hull must be between 1 and 30")
+        if fuel is not None and not (0 <= fuel <= 100):
+            errors.append("Fuel must be between 0 and 100")
+        if missiles is not None and not (0 <= missiles <= 50):
+            errors.append("Missiles must be between 0 and 50")
+        if drones is not None and not (0 <= drones <= 50):
+            errors.append("Drone Parts must be between 0 and 50")
+        if scrap is not None and not (0 <= scrap <= 2000):
+            errors.append("Scrap must be between 0 and 2000")
+        
+        if errors:
+            messagebox.showerror("Invalid Values", "\n".join(errors))
+            return
+        
+        # Confirm
+        confirm_msg = (
+            "Apply the following changes to the save file?\n\n"
+            f"Hull: {hull if hull is not None else 'unchanged'}\n"
+            f"Fuel: {fuel if fuel is not None else 'unchanged'}\n"
+            f"Missiles: {missiles if missiles is not None else 'unchanged'}\n"
+            f"Drone Parts: {drones if drones is not None else 'unchanged'}\n"
+            f"Scrap: {scrap if scrap is not None else 'unchanged'}\n\n"
+            "⚠ FTL MUST BE IN THE MAIN MENU!\n"
+            "If FTL is currently running a game, changes will be overwritten."
+        )
+        
+        if not messagebox.askyesno("Confirm Changes", confirm_msg):
+            return
+        
+        # Stop watcher before making changes
+        was_watching = self.watcher is not None
+        if was_watching:
+            self._stop_watcher()
+        
+        # Create backup before modifying
+        self.backup_manager.create_backup()
+        
+        # Apply changes
+        try:
+            parsed = FtlSaveFile(savefile)
+            success = parsed.write_resources(
+                hull=hull,
+                fuel=fuel,
+                drone_parts=drones,
+                missiles=missiles,
+                scrap=scrap
+            )
+            
+            if success:
+                messagebox.showinfo("Success", "Changes applied!\n\nYou can now continue your game in FTL.")
+                self._refresh_snapshots()
+                self._update_current_values()
+            else:
+                messagebox.showerror("Error", "Failed to apply changes. Check console for details.")
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to apply changes: {str(e)}")
+        
+        finally:
+            # Restart watcher if it was running
+            if was_watching:
+                self._start_watcher()
     
     def _on_close(self):
         """Handle window close"""

@@ -40,6 +40,9 @@ class FtlSaveFile:
     missiles: int = 0
     scrap: int = 0
     
+    # Resource offset (for writing)
+    _resource_offset: int = 0
+    
     def __init__(self, path: Path):
         self.path = Path(path)
         self._parse()
@@ -164,7 +167,8 @@ class FtlSaveFile:
         best_pos = None
         best_score = 0
         
-        for i in range(0, len(data) - 20, 4):
+        # Check every byte position, not just aligned ones
+        for i in range(0, len(data) - 20):
             try:
                 values = []
                 for j in range(5):
@@ -172,6 +176,10 @@ class FtlSaveFile:
                     values.append(val)
                 
                 hull, fuel, drones, missiles, scrap = values
+                
+                # Skip if fuel is unreasonably high (not a valid game state)
+                if fuel > 100:
+                    continue
                 
                 # Score based on how reasonable the values are
                 score = 0
@@ -194,8 +202,8 @@ class FtlSaveFile:
                 if scrap > 0:
                     score += 1
                 
-                # Must have reasonable hull and at least some resources
-                if score > best_score and score >= 11 and hull > 0:
+                # Must have reasonable hull and fuel > 0 (active game)
+                if score > best_score and score >= 11 and hull > 0 and fuel > 0:
                     best_score = score
                     best_pos = i + start_pos
                     
@@ -203,6 +211,7 @@ class FtlSaveFile:
                 continue
         
         if best_pos is not None:
+            self._resource_offset = best_pos
             f.seek(best_pos)
             self.hull = self._read_integer(f)
             self.fuel = self._read_integer(f)
@@ -211,6 +220,7 @@ class FtlSaveFile:
             self.scrap = self._read_integer(f)
         else:
             # Fallback: couldn't find resources
+            self._resource_offset = 0
             self.hull = 0
             self.fuel = 0
             self.drone_parts = 0
@@ -326,3 +336,150 @@ class FtlSaveFile:
             'invalid': self.invalid_file,
             'is_profile': self.is_profile,
         }
+    
+    def find_resource_offset(self) -> Optional[int]:
+        """Find the offset where resources are stored in the file.
+        
+        Returns the cached offset from parsing, or searches for it if not cached.
+        """
+        # Return cached offset if available
+        if self._resource_offset > 0:
+            return self._resource_offset
+        
+        # Otherwise search for it
+        try:
+            with open(self.path, 'rb') as f:
+                data = f.read()
+            
+            best_pos = None
+            best_score = 0
+            
+            # Start search from offset 0x40 to skip header section
+            # Check every byte position, not just aligned ones
+            for i in range(0x40, len(data) - 20):
+                try:
+                    values = []
+                    for j in range(5):
+                        val = struct.unpack('<i', data[i+j*4:i+j*4+4])[0]
+                        values.append(val)
+                    
+                    hull, fuel, drones, missiles, scrap = values
+                    
+                    # Skip if fuel is unreasonably high (not a valid game state)
+                    if fuel > 100:
+                        continue
+                    
+                    # Score based on how reasonable the values are
+                    score = 0
+                    if 1 <= hull <= 30:
+                        score += 3  # Hull is most specific
+                    if 0 <= fuel <= 100:
+                        score += 2
+                    if 0 <= drones <= 50:
+                        score += 2
+                    if 0 <= missiles <= 50:
+                        score += 2
+                    if 0 <= scrap <= 2000:
+                        score += 2
+                    
+                    # Bonus for non-zero values (active game)
+                    if hull > 0:
+                        score += 1
+                    if fuel > 0:
+                        score += 1
+                    if scrap > 0:
+                        score += 1
+                    
+                    # Must have reasonable hull and fuel > 0 (active game)
+                    if score > best_score and score >= 11 and hull > 0 and fuel > 0:
+                        best_score = score
+                        best_pos = i
+                        
+                except struct.error:
+                    continue
+            
+            return best_pos
+            
+        except IOError:
+            return None
+    
+    def write_resources(self, hull: Optional[int] = None, fuel: Optional[int] = None,
+                        drone_parts: Optional[int] = None, missiles: Optional[int] = None,
+                        scrap: Optional[int] = None) -> bool:
+        """
+        Write resources to the save file at the known offset.
+        
+        Args:
+            hull: New hull value (1-30)
+            fuel: New fuel value (0-100)
+            drone_parts: New drone parts value (0-50)
+            missiles: New missiles value (0-50)
+            scrap: New scrap value (0-2000)
+        
+        Returns:
+            True if successful, False otherwise
+        
+        Warning:
+            FTL must be in the main menu when calling this, otherwise
+            the game will overwrite the changes when it saves.
+        """
+        if self.is_profile:
+            print("Cannot write resources to profile file")
+            return False
+        
+        # Find the resource offset
+        offset = self.find_resource_offset()
+        if offset is None:
+            print("Could not find resource offset in file")
+            return False
+        
+        # Validate values
+        if hull is not None and not (1 <= hull <= 30):
+            print(f"Invalid hull value: {hull} (must be 1-30)")
+            return False
+        if fuel is not None and not (0 <= fuel <= 100):
+            print(f"Invalid fuel value: {fuel} (must be 0-100)")
+            return False
+        if drone_parts is not None and not (0 <= drone_parts <= 50):
+            print(f"Invalid drone_parts value: {drone_parts} (must be 0-50)")
+            return False
+        if missiles is not None and not (0 <= missiles <= 50):
+            print(f"Invalid missiles value: {missiles} (must be 0-50)")
+            return False
+        if scrap is not None and not (0 <= scrap <= 2000):
+            print(f"Invalid scrap value: {scrap} (must be 0-2000)")
+            return False
+        
+        try:
+            # Read the entire file
+            with open(self.path, 'rb') as f:
+                data = bytearray(f.read())
+            
+            # Write the new values at the resource offset
+            # Order: hull, fuel, drone_parts, missiles, scrap
+            if hull is not None:
+                struct.pack_into('<i', data, offset, hull)
+                self.hull = hull
+            if fuel is not None:
+                struct.pack_into('<i', data, offset + 4, fuel)
+                self.fuel = fuel
+            if drone_parts is not None:
+                struct.pack_into('<i', data, offset + 8, drone_parts)
+                self.drone_parts = drone_parts
+            if missiles is not None:
+                struct.pack_into('<i', data, offset + 12, missiles)
+                self.missiles = missiles
+            if scrap is not None:
+                struct.pack_into('<i', data, offset + 16, scrap)
+                self.scrap = scrap
+            
+            # Write back to file
+            with open(self.path, 'wb') as f:
+                f.write(data)
+            
+            print(f"Resources written successfully at offset 0x{offset:x}")
+            return True
+            
+        except IOError as e:
+            print(f"Error writing resources: {e}")
+            return False
