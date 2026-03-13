@@ -8,10 +8,12 @@ from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 from typing import Optional
 import threading
+from datetime import datetime
 
 from .config import Config
 from .backup_manager import BackupManager, BackupSnapshot
 from .file_watcher import FtlSaveWatcher
+from .save_parser import FtlSaveFile
 
 
 class FtlAutosaveApp:
@@ -20,8 +22,8 @@ class FtlAutosaveApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("FTL Autosave (Mac)")
-        self.root.geometry("600x500")
-        self.root.minsize(500, 400)
+        self.root.geometry("900x650")
+        self.root.minsize(800, 550)
         
         # Load config
         self.config = Config.from_file()
@@ -49,12 +51,22 @@ class FtlAutosaveApp:
     
     def _build_ui(self):
         """Build the user interface"""
-        # Main container
+        # Main container with two columns
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Left column (snapshots)
+        left_frame = ttk.Frame(main_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Right column (current values)
+        right_frame = ttk.Frame(main_frame, padding=(10, 0, 0, 0))
+        right_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # === LEFT COLUMN ===
+        
         # Status bar at top
-        status_frame = ttk.LabelFrame(main_frame, text="Status", padding="5")
+        status_frame = ttk.LabelFrame(left_frame, text="Status", padding="5")
         status_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Status text and indicator
@@ -89,7 +101,7 @@ class FtlAutosaveApp:
         self.stop_btn.pack(side=tk.LEFT)
         
         # Path configuration
-        path_frame = ttk.LabelFrame(main_frame, text="FTL Save Path", padding="5")
+        path_frame = ttk.LabelFrame(left_frame, text="FTL Save Path", padding="5")
         path_frame.pack(fill=tk.X, pady=(0, 10))
         
         path_inner = ttk.Frame(path_frame)
@@ -105,10 +117,9 @@ class FtlAutosaveApp:
         # Path status indicator
         self.path_status = ttk.Label(path_frame, text="")
         self.path_status.pack(anchor=tk.W)
-        self._update_path_status()
         
         # Snapshots list
-        list_frame = ttk.LabelFrame(main_frame, text="Snapshots", padding="5")
+        list_frame = ttk.LabelFrame(left_frame, text="Snapshots", padding="5")
         list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
         # Listbox with scrollbar
@@ -134,14 +145,14 @@ class FtlAutosaveApp:
         self.snapshot_count.pack(anchor=tk.W)
         
         # Details frame
-        details_frame = ttk.LabelFrame(main_frame, text="Details", padding="5")
+        details_frame = ttk.LabelFrame(left_frame, text="Details", padding="5")
         details_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.details_text = tk.Text(details_frame, height=6, font=("Monaco", 9), state='disabled')
+        self.details_text = tk.Text(details_frame, height=8, font=("Monaco", 9), state='disabled')
         self.details_text.pack(fill=tk.X)
         
         # Buttons
-        button_frame = ttk.Frame(main_frame)
+        button_frame = ttk.Frame(left_frame)
         button_frame.pack(fill=tk.X)
         
         self.restore_btn = ttk.Button(
@@ -182,6 +193,74 @@ class FtlAutosaveApp:
             command=self._create_manual_backup
         )
         backup_btn.pack(side=tk.RIGHT)
+        
+        # === RIGHT COLUMN (Current Values) ===
+        
+        current_frame = ttk.LabelFrame(right_frame, text="Current Game", padding="10")
+        current_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Ship name
+        self.current_ship_label = ttk.Label(current_frame, text="Ship: ---", font=("Helvetica", 12, "bold"))
+        self.current_ship_label.pack(anchor=tk.W, pady=(0, 10))
+        
+        # Separator
+        ttk.Separator(current_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(0, 10))
+        
+        # Hull
+        hull_frame = ttk.Frame(current_frame)
+        hull_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(hull_frame, text="🛡 Hull:", font=("Helvetica", 11)).pack(side=tk.LEFT)
+        self.current_hull_label = ttk.Label(hull_frame, text="---/---", font=("Monaco", 11, "bold"))
+        self.current_hull_label.pack(side=tk.RIGHT)
+        
+        # Fuel (Energy)
+        fuel_frame = ttk.Frame(current_frame)
+        fuel_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(fuel_frame, text="⚡ Fuel:", font=("Helvetica", 11)).pack(side=tk.LEFT)
+        self.current_fuel_label = ttk.Label(fuel_frame, text="---", font=("Monaco", 11, "bold"))
+        self.current_fuel_label.pack(side=tk.RIGHT)
+        
+        # Missiles
+        missiles_frame = ttk.Frame(current_frame)
+        missiles_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(missiles_frame, text="🚀 Missiles:", font=("Helvetica", 11)).pack(side=tk.LEFT)
+        self.current_missiles_label = ttk.Label(missiles_frame, text="---", font=("Monaco", 11, "bold"))
+        self.current_missiles_label.pack(side=tk.RIGHT)
+        
+        # Drone Parts
+        drones_frame = ttk.Frame(current_frame)
+        drones_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(drones_frame, text="🤖 Drone Parts:", font=("Helvetica", 11)).pack(side=tk.LEFT)
+        self.current_drones_label = ttk.Label(drones_frame, text="---", font=("Monaco", 11, "bold"))
+        self.current_drones_label.pack(side=tk.RIGHT)
+        
+        # Separator
+        ttk.Separator(current_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        
+        # Scrap
+        scrap_frame = ttk.Frame(current_frame)
+        scrap_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(scrap_frame, text="💰 Scrap:", font=("Helvetica", 11)).pack(side=tk.LEFT)
+        self.current_scrap_label = ttk.Label(scrap_frame, text="---", font=("Monaco", 11, "bold"))
+        self.current_scrap_label.pack(side=tk.RIGHT)
+        
+        # Sector (if available)
+        sector_frame = ttk.Frame(current_frame)
+        sector_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(sector_frame, text="📍 Sector:", font=("Helvetica", 11)).pack(side=tk.LEFT)
+        self.current_sector_label = ttk.Label(sector_frame, text="---", font=("Monaco", 11, "bold"))
+        self.current_sector_label.pack(side=tk.RIGHT)
+        
+        # Last updated
+        ttk.Separator(current_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        self.current_updated_label = ttk.Label(current_frame, text="Last update: ---", font=("Helvetica", 9), foreground="gray")
+        self.current_updated_label.pack(anchor=tk.W)
+        
+        # Store right frame reference for updates
+        self.right_frame = right_frame
+        
+        # Now update path status (after all UI elements are created)
+        self._update_path_status()
     
     def _update_path_status(self):
         """Update the path status indicator"""
@@ -199,6 +278,75 @@ class FtlAutosaveApp:
         else:
             self.path_status.config(text="✗ Save path does not exist", foreground="red")
             self._update_watcher_buttons(running=False, path_valid=False)
+        
+        # Update current values display
+        self._update_current_values()
+    
+    def _update_current_values(self):
+        """Update the current game values display"""
+        save_path = Path(self.config.ftl_save_path)
+        savefile = save_path / self.config.savefile
+        
+        if not savefile.exists():
+            self.current_ship_label.config(text="Ship: No save file")
+            self.current_hull_label.config(text="---/---")
+            self.current_fuel_label.config(text="---")
+            self.current_missiles_label.config(text="---")
+            self.current_drones_label.config(text="---")
+            self.current_scrap_label.config(text="---")
+            self.current_sector_label.config(text="---")
+            self.current_updated_label.config(text="Last update: ---")
+            return
+        
+        try:
+            parsed = FtlSaveFile(savefile)
+            
+            if parsed.is_profile:
+                self.current_ship_label.config(text="Ship: Profile File")
+                self.current_hull_label.config(text="---/---")
+                self.current_fuel_label.config(text="---")
+                self.current_missiles_label.config(text="---")
+                self.current_drones_label.config(text="---")
+                self.current_scrap_label.config(text="---")
+                self.current_sector_label.config(text="---")
+            else:
+                # Ship name and type
+                ship_display = f"{parsed.shipname or 'Unknown'} ({parsed.shiptype or 'Unknown'})"
+                self.current_ship_label.config(text=ship_display)
+                
+                # Hull
+                if parsed.hull is not None and parsed.hull > 0:
+                    self.current_hull_label.config(text=str(parsed.hull))
+                else:
+                    self.current_hull_label.config(text="---")
+                
+                # Fuel
+                self.current_fuel_label.config(text=str(parsed.fuel) if parsed.fuel is not None else "---")
+                
+                # Missiles
+                self.current_missiles_label.config(text=str(parsed.missiles) if parsed.missiles is not None else "---")
+                
+                # Drone Parts
+                self.current_drones_label.config(text=str(parsed.drone_parts) if parsed.drone_parts is not None else "---")
+                
+                # Scrap
+                self.current_scrap_label.config(text=str(parsed.scrap) if parsed.scrap is not None else "---")
+                
+                # Sector (not yet implemented in parser)
+                self.current_sector_label.config(text="---")
+            
+            # Update timestamp
+            self.current_updated_label.config(text=f"Last update: {datetime.now().strftime('%H:%M:%S')}")
+            
+        except Exception as e:
+            self.current_ship_label.config(text="Ship: Error reading")
+            self.current_hull_label.config(text="---/---")
+            self.current_fuel_label.config(text="---")
+            self.current_missiles_label.config(text="---")
+            self.current_drones_label.config(text="---")
+            self.current_scrap_label.config(text="---")
+            self.current_sector_label.config(text="---")
+            self.current_updated_label.config(text=f"Error: {str(e)[:20]}")
     
     def _browse_path(self):
         """Browse for FTL save directory"""
@@ -301,6 +449,9 @@ class FtlAutosaveApp:
         """Schedule periodic refresh"""
         if self.config.auto_update_snapshots:
             self._refresh_snapshots()
+        
+        # Update current values display
+        self._update_current_values()
         
         # Schedule next refresh
         self.root.after(3000, self._schedule_refresh)

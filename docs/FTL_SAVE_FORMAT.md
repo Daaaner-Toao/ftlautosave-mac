@@ -87,17 +87,51 @@ Contains:
 - Event text: "REBEL_AUTO_REFUEL destroyed 1278"
 - Ship references: "ship_REBEL_AUTO_REFUEL_destroyed_c1_text"
 
-## Resources Section (Near End of File)
+## Resources Section (After Crew Data)
 
-Resources are typically found in the last 200 bytes:
+Resources are located after the crew section, typically around offset 0xF0-0x100:
 
-| Order | Resource | Typical Range |
-|-------|----------|---------------|
-| 1 | Hull | 1-30 |
-| 2 | Fuel | 0-100 |
-| 3 | Drone Parts | 0-50 |
-| 4 | Missiles | 0-50 |
-| 5 | Scrap | 0-2000 |
+| Order | Resource | Typical Range | Example Value |
+|-------|----------|---------------|---------------|
+| 1 | Hull | 1-30 | 29 |
+| 2 | Fuel | 0-100 | 18 |
+| 3 | Drone Parts | 0-50 | 5 |
+| 4 | Missiles | 0-50 | 10 |
+| 5 | Scrap | 0-2000 | 93 |
+
+### Resource Location Strategy
+
+Resources are stored as 5 consecutive 4-byte little-endian integers. They appear after:
+1. Ship info (name + type strings)
+2. Achievement/flag arrays
+3. Ship variant arrays
+4. Crew member data
+
+The exact offset varies based on string lengths and crew count. The parser scans from offset 0x40 onwards looking for a valid resource pattern using scoring:
+- Hull must be 1-30 (most specific indicator)
+- Fuel should be 0-100
+- Drone Parts should be 0-50
+- Missiles should be 0-50
+- Scrap should be 0-2000
+
+### Example Resource Location
+
+In a test file with:
+- Ship: "Kestrel" (PLAYER_SHIP_HARD)
+- 3 crew members: Grace, Mikhail, José
+
+Resources were found at offset **0xF3** (243):
+```
+0xf0: 00 00 00 1d 00 00 00 12 00 00 00 05 00 00 00 0a
+0x100: 00 00 00 5d
+```
+
+Decoded:
+- `1d 00 00 00` = 29 (Hull)
+- `12 00 00 00` = 18 (Fuel)
+- `05 00 00 00` = 5 (Drone Parts)
+- `0a 00 00 00` = 10 (Missiles)
+- `5d 00 00 00` = 93 (Scrap)
 
 ## Known String Patterns
 

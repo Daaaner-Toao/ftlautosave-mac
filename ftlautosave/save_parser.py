@@ -145,10 +145,77 @@ class FtlSaveFile:
         self.shipname = self._read_string(f)
         self.shiptype = self._read_string(f)
         
-        # Try to find resources by searching for the pattern at end of file
-        # Resources are typically near the end: hull, fuel, drones, missiles, scrap
-        # Each is a 4-byte integer, values are typically small (< 1000)
-        self._find_resources(f)
+        # Resources are located after ship type, but we need to scan for them
+        # They appear after crew data and other structures
+        self._find_resources_after_ship(f)
+    
+    def _find_resources_after_ship(self, f):
+        """Find resources by scanning the file for the resource pattern"""
+        # Get current position and file size
+        start_pos = f.tell()
+        f.seek(0, 2)  # Seek to end
+        file_size = f.tell()
+        
+        # Resources: hull (1-30), fuel (0-100), drones (0-50), missiles (0-50), scrap (0-2000)
+        # Search from current position to end
+        f.seek(start_pos)
+        data = f.read()
+        
+        best_pos = None
+        best_score = 0
+        
+        for i in range(0, len(data) - 20, 4):
+            try:
+                values = []
+                for j in range(5):
+                    val = struct.unpack('<i', data[i+j*4:i+j*4+4])[0]
+                    values.append(val)
+                
+                hull, fuel, drones, missiles, scrap = values
+                
+                # Score based on how reasonable the values are
+                score = 0
+                if 1 <= hull <= 30:
+                    score += 3  # Hull is most specific
+                if 0 <= fuel <= 100:
+                    score += 2
+                if 0 <= drones <= 50:
+                    score += 2
+                if 0 <= missiles <= 50:
+                    score += 2
+                if 0 <= scrap <= 2000:
+                    score += 2
+                
+                # Bonus for non-zero values (active game)
+                if hull > 0:
+                    score += 1
+                if fuel > 0:
+                    score += 1
+                if scrap > 0:
+                    score += 1
+                
+                # Must have reasonable hull and at least some resources
+                if score > best_score and score >= 11 and hull > 0:
+                    best_score = score
+                    best_pos = i + start_pos
+                    
+            except struct.error:
+                continue
+        
+        if best_pos is not None:
+            f.seek(best_pos)
+            self.hull = self._read_integer(f)
+            self.fuel = self._read_integer(f)
+            self.drone_parts = self._read_integer(f)
+            self.missiles = self._read_integer(f)
+            self.scrap = self._read_integer(f)
+        else:
+            # Fallback: couldn't find resources
+            self.hull = 0
+            self.fuel = 0
+            self.drone_parts = 0
+            self.missiles = 0
+            self.scrap = 0
     
     def _find_resources(self, f):
         """Find and extract resources by scanning the file"""

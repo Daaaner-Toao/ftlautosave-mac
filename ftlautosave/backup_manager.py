@@ -30,13 +30,21 @@ class BackupSnapshot:
     @property
     def display_name(self) -> str:
         """Generate display name for the snapshot"""
-        time_str = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        date_str = self.timestamp.strftime("%d.%m.%Y")
+        time_str = self.timestamp.strftime("%H:%M")
+        
         if self.save_content and not self.save_content.invalid_file:
             if self.save_content.is_profile:
-                return f"{time_str} - Profile Backup [v{self.save_content.version}]"
-            modifier = f" ({self.save_content.save_modifier})" if self.save_content.save_modifier else ""
-            return f"{time_str} - {self.save_content.shipname} [v{self.save_content.version}{modifier}]"
-        return time_str
+                return f"{date_str}, {time_str} - Profile Backup [v{self.save_content.version}]"
+            
+            # Format: Datum, Zeit, Sektor, Schiffstyp - Hülle
+            sector = "---"  # Sector not yet implemented in parser
+            shiptype = self.save_content.shiptype or "Unknown"
+            hull = self.save_content.hull if self.save_content.hull else "---"
+            
+            return f"{date_str}, {time_str}, Sektor {sector}, {shiptype} - Hülle: {hull}"
+        
+        return f"{date_str}, {time_str}"
     
     def get_details(self) -> str:
         """Get detailed information about the snapshot"""

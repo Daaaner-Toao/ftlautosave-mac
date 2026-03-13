@@ -32,11 +32,28 @@
   - Build: `python setup.py py2app`
   - Output: `dist/FTL Autosave.app`
 
+- [x] **FTL Save Format Reference** - Documentation for save file structure
+  - Created `docs/FTL_SAVE_FORMAT.md`
+  - Documents header, stats, ship info, crew, weapons, sector/map sections
+  - Lists areas for future investigation (sector number, beacon count, etc.)
+
+- [x] **GUI Layout Improvements** - Better window proportions and layout
+  - Window size increased to 900x650 (from 600x500)
+  - Two-column layout: snapshots on left, current values on right
+  - Details section height increased to 8 lines
+  - Right panel shows: Ship, Hull, Fuel, Missiles, Drone Parts, Scrap, Sector
+
+- [x] **Snapshot Display Format** - New format for snapshot list
+  - Format: "Datum, Zeit, Sektor, Schiffstyp - Hülle"
+  - Example: "13.03.2026, 02:05, Sektor ---, Kestrel Cruiser - Hülle: 15"
+  - Sector extraction not yet implemented (shows "---")
+
 ## Medium Priority
 
 - [ ] **Auto-start FTL** - Option to launch FTL when starting the app
 - [ ] **System tray** - Minimize to menu bar instead of taskbar
 - [ ] **Keyboard shortcuts** - Common actions via keyboard
+- [ ] **Sector extraction** - Parse sector number from save file
 
 ## Low Priority
 
