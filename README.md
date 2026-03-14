@@ -1,6 +1,6 @@
 # FTL Autosave for Mac
 
-A simple autosave utility for **FTL: Faster Than Light** on macOS.
+A powerful save manager and stat editor for **FTL: Faster Than Light** on macOS.
 
 ## Why This Exists
 
@@ -9,6 +9,11 @@ Look, I'm a dad with a full-time job. I love FTL - it's one of those perfect "30
 FTL is designed to be unforgiving. That's part of its charm. But when you only have limited gaming time, starting over from scratch every time gets old fast. This tool lets you create save snapshots so you can go back to an earlier point if things go sideways.
 
 Think of it as a "casual mode" for those of us who can't afford to lose an entire evening to one bad jump.
+
+**And then... I got a little carried away.** 😅
+
+Now, not only can you back up your saves, but you can actually adjust your stats right in the middle of a session. Want to give yourself a little extra scrap to buy that shiny new weapon? Need to tweak your reactor power? Go for it. 
+**But fair warning from one gamer to another:** Use it wisely. Being able to cheat your way out of any situation can quickly take the fun and tension out of the game. It's there if you need it, but use it at your own risk! 😉
 
 ## What It Does
 
@@ -283,3 +288,4 @@ MIT License - do whatever you want with it.
 ---
 
 *Made by a dad who just wants to enjoy his 30 minutes of gaming without starting over for the 50th time.*
+[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/daaanertoao)
