@@ -29,6 +29,8 @@ Now, not only can you back up your saves, but you can actually adjust your stats
 - **Settings dialog** - Configure watch interval, max snapshots, save file names
 - **No bloat** - Pure Python, uses tkinter (built into Python), no heavy dependencies
 
+![Screenshot of FTL Autosave](ftlautosave-mac.png)
+
 ## Requirements
 
 - macOS
