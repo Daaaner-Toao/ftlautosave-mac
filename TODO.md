@@ -56,15 +56,42 @@
   - Resource offset detection fixed (now finds correct offset at 0xF3)
   - Validation of value ranges (Hull: 1-30, Fuel: 0-100, etc.)
 
+- [x] **Multi-Select Snapshots** - Select multiple snapshots at once
+  - Shift+Click for range selection
+  - Ctrl+Click for individual multi-select
+  - Delete all selected snapshots at once
+
+- [x] **Delete All Button** - Quick cleanup of old snapshots
+  - Deletes all snapshots except the most recent one
+  - Confirmation dialog before deletion
+
+- [x] **Improved Details Tab** - Better visual presentation
+  - Structured layout with separate labels
+  - 2-column resource display
+  - Emojis for better readability
+  - Grouped info: Timestamp, Ship, Resources, Stats, Version
+
+- [x] **Auto-start FTL** - Launch FTL when starting the app
+  - Checks if FTL is running on startup
+  - Prompts to start FTL if not running
+  - Auto-detects FTL.app location
+  - Configurable FTL app path
+
+- [x] **Versioning** - Single source of truth for version
+  - VERSION file contains version number
+  - setup.py reads from VERSION
+  - GUI shows version in title bar
+  - Makefile targets: `make version`, `make release V=x.x.x`
+
 ## Medium Priority
 
-- [ ] **Auto-start FTL** - Option to launch FTL when starting the app
 - [ ] **System tray** - Minimize to menu bar instead of taskbar
-- [ ] **Keyboard shortcuts** - Common actions via keyboard
-- [ ] **Sector extraction** - Parse sector number from save file
+- [ ] **vertical redesign** - Vertical setup to fit better beside the windowed game screen
+- [ ] **Sector extraction** - Extract sector number from save file
+- [ ] **Beacon count** - Show progress toward end of run
+
 
 ## Low Priority
 
 - [ ] **Export/Import snapshots** - Backup snapshots to external location
-- [ ] **Multi-profile support** - Handle multiple FTL profiles
-- [ ] **Dark mode** - Better dark mode support for macOS
+

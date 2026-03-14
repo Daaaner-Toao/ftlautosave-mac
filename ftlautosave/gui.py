@@ -9,11 +9,19 @@ from pathlib import Path
 from typing import Optional
 import threading
 from datetime import datetime
+import subprocess
+import os
 
 from .config import Config
 from .backup_manager import BackupManager, BackupSnapshot
 from .file_watcher import FtlSaveWatcher
 from .save_parser import FtlSaveFile
+
+# Get version
+try:
+    from . import __version__
+except ImportError:
+    __version__ = "1.2.0"
 
 
 class FtlAutosaveApp:
@@ -21,7 +29,7 @@ class FtlAutosaveApp:
     
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("FTL Autosave (Mac)")
+        self.root.title(f"FTL Autosave v{__version__}")
         self.root.geometry("900x650")
         self.root.minsize(800, 550)
         
@@ -36,6 +44,9 @@ class FtlAutosaveApp:
         
         # Build UI
         self._build_ui()
+        
+        # Check if FTL is running and offer to start it
+        self.root.after(100, self._check_ftl_running)
         
         # Start watching if path exists
         self._start_watcher()
@@ -140,7 +151,7 @@ class FtlAutosaveApp:
         self.snapshot_list = tk.Listbox(
             list_container,
             yscrollcommand=scrollbar.set,
-            selectmode=tk.SINGLE,
+            selectmode=tk.EXTENDED,
             font=("Monaco", 10)
         )
         self.snapshot_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -152,12 +163,82 @@ class FtlAutosaveApp:
         self.snapshot_count = ttk.Label(list_frame, text="0 snapshots")
         self.snapshot_count.pack(anchor=tk.W)
         
-        # Details frame
+        # Details frame - structured layout
         details_frame = ttk.LabelFrame(left_frame, text="Details", padding="5")
         details_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.details_text = tk.Text(details_frame, height=8, font=("Monaco", 9), state='disabled')
-        self.details_text.pack(fill=tk.X)
+        # Timestamp
+        self.detail_timestamp_label = ttk.Label(
+            details_frame, 
+            text="Timestamp: ---",
+            font=("Helvetica", 9)
+        )
+        self.detail_timestamp_label.pack(anchor=tk.W)
+        
+        # Ship info
+        self.detail_ship_label = ttk.Label(
+            details_frame, 
+            text="Ship: ---",
+            font=("Helvetica", 10, "bold")
+        )
+        self.detail_ship_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Separator
+        ttk.Separator(details_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+        
+        # Resources frame
+        resources_frame = ttk.Frame(details_frame)
+        resources_frame.pack(fill=tk.X)
+        
+        # Resources in 2 columns
+        left_resources = ttk.Frame(resources_frame)
+        left_resources.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        right_resources = ttk.Frame(resources_frame)
+        right_resources.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        
+        self.detail_hull_label = ttk.Label(left_resources, text="🛡 Hull: ---", font=("Monaco", 9))
+        self.detail_hull_label.pack(anchor=tk.W)
+        
+        self.detail_fuel_label = ttk.Label(left_resources, text="⚡ Fuel: ---", font=("Monaco", 9))
+        self.detail_fuel_label.pack(anchor=tk.W)
+        
+        self.detail_missiles_label = ttk.Label(left_resources, text="🚀 Missiles: ---", font=("Monaco", 9))
+        self.detail_missiles_label.pack(anchor=tk.W)
+        
+        self.detail_drones_label = ttk.Label(right_resources, text="🤖 Drones: ---", font=("Monaco", 9))
+        self.detail_drones_label.pack(anchor=tk.W)
+        
+        self.detail_scrap_label = ttk.Label(right_resources, text="💰 Scrap: ---", font=("Monaco", 9))
+        self.detail_scrap_label.pack(anchor=tk.W)
+        
+        self.detail_sector_label = ttk.Label(right_resources, text="📍 Sector: ---", font=("Monaco", 9))
+        self.detail_sector_label.pack(anchor=tk.W)
+        
+        # Separator
+        ttk.Separator(details_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+        
+        # Stats frame
+        stats_frame = ttk.Frame(details_frame)
+        stats_frame.pack(fill=tk.X)
+        
+        self.detail_defeated_label = ttk.Label(stats_frame, text="💀 Ships Defeated: ---", font=("Monaco", 9))
+        self.detail_defeated_label.pack(anchor=tk.W)
+        
+        self.detail_explored_label = ttk.Label(stats_frame, text="🔍 Locations: ---", font=("Monaco", 9))
+        self.detail_explored_label.pack(anchor=tk.W)
+        
+        # Version info
+        self.detail_version_label = ttk.Label(
+            details_frame, 
+            text="Version: ---",
+            font=("Helvetica", 8),
+            foreground="gray"
+        )
+        self.detail_version_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Store details frame reference
+        self.details_frame = details_frame
         
         # Buttons
         button_frame = ttk.Frame(left_frame)
@@ -178,6 +259,13 @@ class FtlAutosaveApp:
             state='disabled'
         )
         self.delete_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.delete_all_btn = ttk.Button(
+            button_frame,
+            text="Delete All",
+            command=self._delete_all_snapshots
+        )
+        self.delete_all_btn.pack(side=tk.LEFT, padx=(0, 5))
         
         refresh_btn = ttk.Button(
             button_frame,
@@ -359,8 +447,11 @@ class FtlAutosaveApp:
                 # Scrap
                 self.current_scrap_var.set(str(parsed.scrap) if parsed.scrap is not None else "---")
                 
-                # Sector (not yet implemented in parser)
-                self.current_sector_label.config(text="---")
+                # Sector (if available)
+                if parsed.sector_number > 0 and parsed.sector_name:
+                    self.current_sector_label.config(text=f"Sektor {parsed.sector_number} {parsed.sector_name}")
+                else:
+                    self.current_sector_label.config(text="---")
             
             # Update timestamp
             self.current_updated_label.config(text=f"Last update: {datetime.now().strftime('%H:%M:%S')}")
@@ -447,15 +538,30 @@ class FtlAutosaveApp:
     
     def _refresh_snapshots(self):
         """Refresh the snapshot list"""
+        # Save scroll position
+        scroll_position = self.snapshot_list.yview()
+        
         # Remember current selection
         current_selection = self.snapshot_list.curselection()
-        selected_index = current_selection[0] if current_selection else None
+        selected_indices = list(current_selection) if current_selection else []
+        
+        # Get new snapshots
+        new_snapshots = self.backup_manager.get_snapshots()
+        
+        # Check if list actually changed (by comparing timestamps)
+        if hasattr(self, '_snapshots') and len(new_snapshots) == len(self._snapshots):
+            old_timestamps = [s.timestamp for s in self._snapshots]
+            new_timestamps = [s.timestamp for s in new_snapshots]
+            if old_timestamps == new_timestamps:
+                # No changes, just restore scroll position and return
+                self.snapshot_list.yview_moveto(scroll_position[0])
+                return
         
         # Clear current list
         self.snapshot_list.delete(0, tk.END)
         
-        # Get snapshots
-        self._snapshots = self.backup_manager.get_snapshots()
+        # Update snapshots
+        self._snapshots = new_snapshots
         
         # Add to list
         for snapshot in self._snapshots:
@@ -466,12 +572,20 @@ class FtlAutosaveApp:
         self.snapshot_count.config(text=f"{count} snapshot{'s' if count != 1 else ''}")
         
         # Restore selection if possible
-        if selected_index is not None and selected_index < len(self._snapshots):
-            self.snapshot_list.selection_set(selected_index)
-            self._on_snapshot_select(None)
+        if selected_indices:
+            valid_indices = [i for i in selected_indices if i < len(self._snapshots)]
+            if valid_indices:
+                for idx in valid_indices:
+                    self.snapshot_list.selection_set(idx)
+                self._on_snapshot_select(None)
+            else:
+                self._clear_details()
         else:
-            # Clear details
+            # No previous selection, clear details
             self._clear_details()
+        
+        # Restore scroll position
+        self.snapshot_list.yview_moveto(scroll_position[0])
     
     def _schedule_refresh(self):
         """Schedule periodic refresh"""
@@ -501,27 +615,93 @@ class FtlAutosaveApp:
         selection = self.snapshot_list.curselection()
         
         if selection:
+            # Get selected snapshot (use first if multiple selected)
             index = selection[0]
             snapshot = self._snapshots[index]
             
-            # Update details
-            self.details_text.config(state='normal')
-            self.details_text.delete(1.0, tk.END)
-            self.details_text.insert(tk.END, snapshot.get_details())
-            self.details_text.config(state='disabled')
+            # Check if we need to update details (only if selection changed)
+            if not hasattr(self, '_last_selected_index') or self._last_selected_index != index:
+                self._last_selected_index = index
+                self._update_details_display(snapshot)
             
-            # Enable buttons
+            # Enable buttons (for multi-select, enable if any selected)
             self.restore_btn.config(state='normal')
             self.delete_btn.config(state='normal')
         else:
             self._clear_details()
     
+    def _update_details_display(self, snapshot):
+        """Update the details display with snapshot info"""
+        # Timestamp
+        self.detail_timestamp_label.config(
+            text=f"Timestamp: {snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        if snapshot.save_content and not snapshot.save_content.invalid_file:
+            sc = snapshot.save_content
+            
+            if sc.is_profile:
+                # Profile file
+                self.detail_ship_label.config(text="Type: Achievement Profile")
+                self.detail_hull_label.config(text="🛡 Hull: ---")
+                self.detail_fuel_label.config(text="⚡ Fuel: ---")
+                self.detail_missiles_label.config(text="🚀 Missiles: ---")
+                self.detail_drones_label.config(text="🤖 Drones: ---")
+                self.detail_scrap_label.config(text="💰 Scrap: ---")
+                self.detail_sector_label.config(text="📍 Sector: ---")
+                self.detail_defeated_label.config(text="💀 Ships Defeated: ---")
+                self.detail_explored_label.config(text="🔍 Locations: ---")
+                self.detail_version_label.config(text=f"Version: {sc.version} (Profile)")
+            else:
+                # Regular save file
+                self.detail_ship_label.config(text=f"Ship: {sc.shipname or 'Unknown'} ({sc.shiptype or 'Unknown'})")
+                self.detail_hull_label.config(text=f"🛡 Hull: {sc.hull or '---'}")
+                self.detail_fuel_label.config(text=f"⚡ Fuel: {sc.fuel or '---'}")
+                self.detail_missiles_label.config(text=f"🚀 Missiles: {sc.missiles or '---'}")
+                self.detail_drones_label.config(text=f"🤖 Drones: {sc.drone_parts or '---'}")
+                self.detail_scrap_label.config(text=f"💰 Scrap: {sc.scrap or '---'}")
+                
+                if sc.sector_number > 0 and sc.sector_name:
+                    self.detail_sector_label.config(text=f"📍 Sector: {sc.sector_number} {sc.sector_name}")
+                else:
+                    self.detail_sector_label.config(text="📍 Sector: ---")
+                
+                self.detail_defeated_label.config(text=f"💀 Ships Defeated: {sc.total_ships_defeated or '---'}")
+                self.detail_explored_label.config(text=f"🔍 Locations: {sc.total_locations_explored or '---'}")
+                
+                version_text = f"Version: {sc.version}"
+                if sc.save_modifier:
+                    version_text += f" ({sc.save_modifier})"
+                self.detail_version_label.config(text=version_text)
+        else:
+            # Could not parse
+            self.detail_ship_label.config(text="Ship: Unable to parse")
+            self.detail_hull_label.config(text="🛡 Hull: ---")
+            self.detail_fuel_label.config(text="⚡ Fuel: ---")
+            self.detail_missiles_label.config(text="🚀 Missiles: ---")
+            self.detail_drones_label.config(text="🤖 Drones: ---")
+            self.detail_scrap_label.config(text="💰 Scrap: ---")
+            self.detail_sector_label.config(text="📍 Sector: ---")
+            self.detail_defeated_label.config(text="💀 Ships Defeated: ---")
+            self.detail_explored_label.config(text="🔍 Locations: ---")
+            self.detail_version_label.config(text="Version: ---")
+    
     def _clear_details(self):
-        """Clear the details text"""
-        self.details_text.config(state='normal')
-        self.details_text.delete(1.0, tk.END)
-        self.details_text.insert(tk.END, "Select a snapshot to see details")
-        self.details_text.config(state='disabled')
+        """Clear the details display"""
+        self._last_selected_index = None
+        
+        # Reset all detail labels
+        self.detail_timestamp_label.config(text="Timestamp: ---")
+        self.detail_ship_label.config(text="Ship: ---")
+        self.detail_hull_label.config(text="🛡 Hull: ---")
+        self.detail_fuel_label.config(text="⚡ Fuel: ---")
+        self.detail_missiles_label.config(text="🚀 Missiles: ---")
+        self.detail_drones_label.config(text="🤖 Drones: ---")
+        self.detail_scrap_label.config(text="💰 Scrap: ---")
+        self.detail_sector_label.config(text="📍 Sector: ---")
+        self.detail_defeated_label.config(text="💀 Ships Defeated: ---")
+        self.detail_explored_label.config(text="🔍 Locations: ---")
+        self.detail_version_label.config(text="Version: ---")
         
         self.restore_btn.config(state='disabled')
         self.delete_btn.config(state='disabled')
@@ -567,28 +747,72 @@ class FtlAutosaveApp:
             messagebox.showerror("Error", "Failed to restore snapshot.")
     
     def _delete_snapshot(self):
-        """Delete the selected snapshot"""
+        """Delete the selected snapshot(s)"""
         selection = self.snapshot_list.curselection()
         
         if not selection:
             return
         
-        index = selection[0]
-        snapshot = self._snapshots[index]
+        # Get selected snapshots
+        snapshots_to_delete = [self._snapshots[i] for i in selection]
+        
+        # Build confirmation message
+        if len(snapshots_to_delete) == 1:
+            snapshot = snapshots_to_delete[0]
+            confirm_msg = (
+                f"Delete snapshot from {snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S')}?\n\n"
+                "This cannot be undone!"
+            )
+        else:
+            confirm_msg = (
+                f"Delete {len(snapshots_to_delete)} selected snapshots?\n\n"
+                "This cannot be undone!"
+            )
+        
+        # Confirm
+        if not messagebox.askyesno("Confirm Delete", confirm_msg):
+            return
+        
+        # Delete all selected snapshots
+        failed_count = 0
+        for snapshot in snapshots_to_delete:
+            if not snapshot.delete():
+                failed_count += 1
+        
+        self._refresh_snapshots()
+        
+        if failed_count > 0:
+            messagebox.showerror("Error", f"Failed to delete {failed_count} snapshot(s).")
+    
+    def _delete_all_snapshots(self):
+        """Delete all snapshots except the most recent one"""
+        if not hasattr(self, '_snapshots') or len(self._snapshots) <= 1:
+            messagebox.showinfo("Info", "No snapshots to delete (or only one snapshot exists).")
+            return
+        
+        count_to_delete = len(self._snapshots) - 1
         
         # Confirm
         if not messagebox.askyesno(
-            "Confirm Delete",
-            f"Delete snapshot from {snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S')}?\n\n"
+            "Confirm Delete All",
+            f"Delete ALL {count_to_delete} snapshots?\n\n"
+            "The most recent snapshot will be kept.\n"
             "This cannot be undone!"
         ):
             return
         
-        # Delete
-        if snapshot.delete():
-            self._refresh_snapshots()
+        # Delete all except the first (newest)
+        failed_count = 0
+        for snapshot in self._snapshots[1:]:
+            if not snapshot.delete():
+                failed_count += 1
+        
+        self._refresh_snapshots()
+        
+        if failed_count > 0:
+            messagebox.showerror("Error", f"Failed to delete {failed_count} snapshot(s).")
         else:
-            messagebox.showerror("Error", "Failed to delete snapshot.")
+            messagebox.showinfo("Success", f"Deleted {count_to_delete} snapshot(s).")
     
     def _create_manual_backup(self):
         """Create a manual backup"""
@@ -772,6 +996,97 @@ class FtlAutosaveApp:
             # Restart watcher if it was running
             if was_watching:
                 self._start_watcher()
+    
+    def _check_ftl_running(self):
+        """Check if FTL is running and offer to start it if not"""
+        # Only check if auto_start_ftl is enabled
+        if not self.config.auto_start_ftl:
+            return
+        
+        # Check if FTL is already running
+        try:
+            result = subprocess.run(
+                ['pgrep', '-x', 'FTL'],
+                capture_output=True,
+                text=True
+            )
+            ftl_running = result.returncode == 0
+        except Exception:
+            ftl_running = False
+        
+        if ftl_running:
+            # FTL is already running, no action needed
+            return
+        
+        # FTL is not running, ask user if they want to start it
+        if self.config.ftl_app_path and Path(self.config.ftl_app_path).exists():
+            ftl_path = self.config.ftl_app_path
+        else:
+            # Try to find FTL.app
+            ftl_path = self._find_ftl_app()
+            if ftl_path:
+                self.config.ftl_app_path = ftl_path
+                self.config.to_file()
+        
+        if ftl_path:
+            if messagebox.askyesno(
+                "Start FTL?",
+                "FTL is not running.\n\nWould you like to start FTL now?",
+                icon='question'
+            ):
+                self._start_ftl(ftl_path)
+        else:
+            # Show message that FTL could not be found
+            messagebox.showwarning(
+                "FTL Not Found",
+                "Could not find FTL.app.\n\n"
+                "Please set the FTL app path in Settings."
+            )
+    
+    def _find_ftl_app(self) -> Optional[str]:
+        """Try to find FTL.app in common locations"""
+        common_paths = [
+            "/Applications/FTL.app",
+            str(Path.home() / "Applications" / "FTL.app"),
+            "/Applications/Games/FTL.app",
+            "/Applications/Steam/steamapps/common/FTL Faster Than Light/FTL.app",
+        ]
+        
+        for path in common_paths:
+            if Path(path).exists():
+                return path
+        
+        # Try to find using mdfind (Spotlight)
+        try:
+            result = subprocess.run(
+                ['mdfind', 'kMDItemFSName == "FTL.app"'],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                paths = result.stdout.strip().split('\n')
+                if paths:
+                    return paths[0]
+        except Exception:
+            pass
+        
+        return None
+    
+    def _start_ftl(self, app_path: str):
+        """Start FTL app"""
+        try:
+            subprocess.run(
+                ['open', app_path],
+                check=True,
+                timeout=10
+            )
+            messagebox.showinfo("FTL Started", "FTL has been launched.\n\nEnjoy your game!")
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Error", "Timeout while starting FTL. Please try manually.")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Error", f"Failed to start FTL: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Unexpected error: {e}")
     
     def _on_close(self):
         """Handle window close"""

@@ -127,6 +127,69 @@ push: ## Push to remote
 	@git push
 
 # =============================================================================
+# Release
+# =============================================================================
+
+.PHONY: version
+version: ## Show current version
+	@echo "Current version: $$(cat VERSION)"
+
+.PHONY: release
+release: ## Create a new release (usage: make release V=1.3.0)
+ifndef V
+	@echo "$(RED)Error: V variable required. Use: make release V=1.3.0$(RESET)"
+	@exit 1
+endif
+	@echo "$(BLUE)Creating release v$(V)...$(RESET)"
+	@echo "$(V)" > VERSION
+	@echo "$(GREEN)Version updated to $(V)$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Don't forget to:$(RESET)"
+	@echo "  1. Update CHANGELOG.md"
+	@echo "  2. Commit changes: git add -A && git commit -m 'Release v$(V)'"
+	@echo "  3. Create tag: git tag -a v$(V) -m 'Release v$(V)'"
+	@echo "  4. Push: git push origin main --tags"
+
+# =============================================================================
+# DMG Creation
+# =============================================================================
+
+.PHONY: dmg
+dmg: build ## Create DMG installer
+	@echo "$(BLUE)Creating DMG installer...$(RESET)"
+	@rm -f "dist/$(APP_NAME).dmg" 2>/dev/null || true
+	@mkdir -p dist/dmg_temp
+	@cp -R "$(APP_DIR)" dist/dmg_temp/
+	@ln -sf /Applications dist/dmg_temp/Applications
+	@hdiutil create -volname "$(APP_NAME)" \
+		-srcfolder dist/dmg_temp \
+		-ov -format UDZO \
+		"dist/$(APP_NAME).dmg"
+	@rm -rf dist/dmg_temp
+	@echo "$(GREEN)DMG created: dist/$(APP_NAME).dmg$(RESET)"
+	@ls -lh "dist/$(APP_NAME).dmg"
+
+.PHONY: release-dmg
+release-dmg: ## Full release: update version, build, create DMG (usage: make release-dmg V=1.3.0)
+ifndef V
+	@echo "$(RED)Error: V variable required. Use: make release-dmg V=1.3.0$(RESET)"
+	@exit 1
+endif
+	@echo "$(BLUE)Creating full release v$(V)...$(RESET)"
+	@echo "$(V)" > VERSION
+	@$(MAKE) dmg
+	@echo ""
+	@echo "$(GREEN)=== Release v$(V) ready ===$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Next steps:$(RESET)"
+	@echo "  1. Update CHANGELOG.md"
+	@echo "  2. Test the DMG: open dist/FTL Autosave.dmg"
+	@echo "  3. Commit: git add -A && git commit -m 'Release v$(V)'"
+	@echo "  4. Tag: git tag -a v$(V) -m 'Release v$(V)'"
+	@echo "  5. Push: git push origin main --tags"
+	@echo "  6. Create GitHub Release with DMG attachment"
+
+# =============================================================================
 # Info
 # =============================================================================
 

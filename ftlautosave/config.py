@@ -22,8 +22,8 @@ class Config:
     # FTL save path (Mac default)
     ftl_save_path: str = ""
     
-    # FTL executable path
-    ftl_run_path: str = ""
+    # FTL app path (for launching the game)
+    ftl_app_path: str = ""
     
     # Auto-start FTL
     auto_start_ftl: bool = False
@@ -47,6 +47,18 @@ class Config:
             else:
                 # Fallback
                 self.ftl_save_path = str(mac_path)
+        
+        if not self.ftl_app_path:
+            # Try to find FTL.app in common locations
+            common_paths = [
+                "/Applications/FTL.app",
+                Path.home() / "Applications" / "FTL.app",
+                "/Applications/Games/FTL.app",
+            ]
+            for path in common_paths:
+                if Path(path).exists():
+                    self.ftl_app_path = str(path)
+                    break
     
     @classmethod
     def from_file(cls, filepath: str = "ftlautosave.json") -> "Config":
@@ -57,6 +69,12 @@ class Config:
             try:
                 with open(config_path, "r") as f:
                     data = json.load(f)
+                
+                # Migration: ftl_run_path → ftl_app_path (renamed field)
+                if "ftl_run_path" in data and "ftl_app_path" not in data:
+                    data["ftl_app_path"] = data.pop("ftl_run_path")
+                    print("Migrated config: ftl_run_path → ftl_app_path")
+                
                 return cls(**data)
             except (json.JSONDecodeError, TypeError) as e:
                 print(f"Could not load config: {e}, using defaults")

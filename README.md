@@ -14,9 +14,12 @@ Think of it as a "casual mode" for those of us who can't afford to lose an entir
 
 - **Watches your save files** - Monitors `continue.sav` and `ae_prof.sav` for changes
 - **Creates automatic backups** - Every time FTL saves, a snapshot is created
-- **Shows game info** - Ship name, hull, fuel, scrap, and stats for each snapshot
-- **Current game values** - Right panel shows live hull, fuel, missiles, drone parts, scrap
+- **Shows game info** - Ship name, hull, fuel, scrap, sector, and stats for each snapshot
+- **Current game values** - Right panel shows live hull, fuel, missiles, drone parts, scrap, sector
 - **Easy restore** - Pick any snapshot and restore it (go to FTL main menu first)
+- **Multi-select snapshots** - Shift+Click or Ctrl+Click to select multiple snapshots for deletion
+- **Delete All button** - Quickly delete all snapshots except the most recent one
+- **Auto-start FTL** - Prompts to launch FTL if it's not running when you start the app
 - **Manual controls** - Start/Stop watcher buttons, create backup on demand
 - **Settings dialog** - Configure watch interval, max snapshots, save file names
 - **No bloat** - Pure Python, uses tkinter (built into Python), no heavy dependencies
@@ -90,9 +93,13 @@ You can then copy `dist/FTL Autosave.app` to your Applications folder.
 | `make run-fg` | Start in foreground (for debugging) |
 | `make stop` | Stop any running instance |
 | `make build` | Build the Mac App Bundle |
+| `make dmg` | Create DMG installer for distribution |
 | `make clean` | Remove all generated files |
 | `make install` | Build and install to /Applications |
 | `make uninstall` | Remove from /Applications |
+| `make version` | Show current version |
+| `make release V=1.3.0` | Update version number |
+| `make release-dmg V=1.3.0` | Full release: version + DMG |
 | `make test` | Run tests |
 | `make lint` | Run code linter |
 | `make format` | Format code with black |
@@ -121,8 +128,8 @@ The main window shows:
 - Start/Stop buttons for manual watcher control
 - FTL save path with Browse button
 - Snapshot list with format: "Date, Time, Sector, Ship Type - Hull"
-- Details section showing full snapshot info
-- Action buttons: Restore, Delete, Refresh, Settings, Create Backup
+- Details section showing full snapshot info (structured layout with resources and stats)
+- Action buttons: Restore, Delete Selected, Delete All, Refresh, Settings, Create Backup
 
 **Right Panel:**
 - Current game values (updated every 3 seconds):
@@ -132,8 +139,15 @@ The main window shows:
   - Missiles (editable)
   - Drone Parts (editable)
   - Scrap (editable)
-  - Sector (not yet implemented)
+  - Sector (when available)
 - "Apply Changes" button to write edited values to save file
+
+### Multi-Select Snapshots
+
+You can select multiple snapshots at once:
+- **Shift+Click**: Select all snapshots between first click and current
+- **Ctrl+Click**: Add individual snapshots to selection
+- **Delete Selected**: Deletes all selected snapshots at once
 
 ### Live-Value Editing
 
@@ -173,6 +187,7 @@ A `ftlautosave.json` file is created on first run:
   "savefile": "continue.sav",
   "profile": "ae_prof.sav",
   "ftl_save_path": "~/Library/Application Support/FasterThanLight",
+  "ftl_app_path": "/Applications/FTL.app",
   "limit_backup_saves": true,
   "max_snapshots": 500,
   "auto_update_snapshots": true,
@@ -181,10 +196,11 @@ A `ftlautosave.json` file is created on first run:
 ```
 
 - `watch_interval`: How often to check for changes (milliseconds)
+- `ftl_app_path`: Path to FTL.app for auto-start feature
 - `limit_backup_saves`: If true, deletes oldest snapshots when exceeding max_snapshots
 - `max_snapshots`: Maximum number of snapshots to keep
 - `auto_update_snapshots`: Automatically refresh snapshot list
-- `auto_start_ftl`: Launch FTL when starting the app (not yet implemented)
+- `auto_start_ftl`: Launch FTL when starting the app
 
 ## Supported Versions
 
@@ -221,7 +237,30 @@ The number is a Unix timestamp in milliseconds. The tool matches save files with
 
 - This runs alongside FTL, not integrated into the game
 - Restore while FTL is in the main menu, not during gameplay
-- Sector number extraction not yet implemented (shows "---" in snapshot list)
+
+## Release Process
+
+To create a new release:
+
+```bash
+# 1. Create DMG with version update
+make release-dmg V=1.2.0
+
+# 2. Update CHANGELOG.md with release notes
+
+# 3. Test the DMG
+open dist/FTL Autosave.dmg
+
+# 4. Commit and tag
+git add -A
+git commit -m "Release v1.2.0"
+git tag -a v1.2.0 -m "Release v1.2.0"
+
+# 5. Push to GitHub
+git push origin main --tags
+
+# 6. Create GitHub Release with DMG attachment
+```
 
 ## Development
 

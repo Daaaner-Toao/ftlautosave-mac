@@ -38,7 +38,10 @@ class BackupSnapshot:
                 return f"{date_str}, {time_str} - Profile Backup [v{self.save_content.version}]"
             
             # Format: Datum, Zeit, Sektor, Schiffstyp - Hülle
-            sector = "---"  # Sector not yet implemented in parser
+            if self.save_content.sector_number > 0 and self.save_content.sector_name:
+                sector = f"{self.save_content.sector_number} {self.save_content.sector_name}"
+            else:
+                sector = "---"
             shiptype = self.save_content.shiptype or "Unknown"
             hull = self.save_content.hull if self.save_content.hull else "---"
             

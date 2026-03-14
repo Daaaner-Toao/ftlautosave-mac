@@ -40,6 +40,10 @@ class FtlSaveFile:
     missiles: int = 0
     scrap: int = 0
     
+    # Sector info
+    sector_number: int = 0
+    sector_name: str = ""
+    
     # Resource offset (for writing)
     _resource_offset: int = 0
     
@@ -151,6 +155,9 @@ class FtlSaveFile:
         # Resources are located after ship type, but we need to scan for them
         # They appear after crew data and other structures
         self._find_resources_after_ship(f)
+        
+        # Try to find sector information
+        self._find_sector_info(f)
     
     def _find_resources_after_ship(self, f):
         """Find resources by scanning the file for the resource pattern"""
@@ -302,6 +309,113 @@ class FtlSaveFile:
             self.missiles = 0
             self.scrap = 0
     
+    def _find_sector_info(self, f):
+        """Find sector information by searching for known sector names"""
+        # Get file size and read entire file
+        f.seek(0, 2)
+        file_size = f.tell()
+        f.seek(0)
+        data = f.read()
+        
+        # List of sector names to search for (in different languages)
+        # Note: These are the final sector names. Regular sectors use different names.
+        sector_names = [
+            # English
+            "Rebel Fortress",
+            "Rebel Stronghold",
+            "Last Stand",
+            "Hidden Base",
+            "Crystal Home",
+            # German
+            "Rebellenfestung",
+            "Rebellenhochburg",
+            "Letzter Stand",
+            "Versteckte Basis",
+            "Kristall-Heimat",
+        ]
+        
+        for sector_name in sector_names:
+            name_bytes = sector_name.encode('utf-8')
+            name_len = len(name_bytes)
+            
+            # Search for the sector name in the file
+            pos = data.find(name_bytes)
+            while pos != -1:
+                # Check if there is a 4-byte length prefix before the string
+                if pos >= 4:
+                    length_prefix = data[pos-4:pos]
+                    # Convert length prefix to integer (little-endian)
+                    length = struct.unpack('<i', length_prefix)[0]
+                    if length == name_len:
+                        # Found a length-prefixed string match
+                        # Now look for sector number nearby
+                        # Check 4 bytes before the length prefix
+                        if pos >= 8:
+                            candidate_bytes = data[pos-8:pos-4]
+                            try:
+                                candidate = struct.unpack('<i', candidate_bytes)[0]
+                                if 1 <= candidate <= 36:
+                                    self.sector_number = candidate
+                                    self.sector_name = sector_name
+                                    return
+                            except struct.error:
+                                pass
+                        # Check 4 bytes after the string
+                        if pos + 4 + name_len <= file_size:
+                            candidate_bytes = data[pos+4+name_len:pos+8+name_len]
+                            try:
+                                candidate = struct.unpack('<i', candidate_bytes)[0]
+                                if 1 <= candidate <= 36:
+                                    self.sector_number = candidate
+                                    self.sector_name = sector_name
+                                    return
+                            except struct.error:
+                                pass
+                        # Try 2-byte and 1-byte integers for the sector number
+                        # 2-byte before length prefix
+                        if pos >= 6:
+                            candidate_bytes = data[pos-6:pos-4]
+                            try:
+                                candidate = struct.unpack('<h', candidate_bytes)[0]  # signed short
+                                if 1 <= candidate <= 36:
+                                    self.sector_number = candidate
+                                    self.sector_name = sector_name
+                                    return
+                            except struct.error:
+                                pass
+                        # 2-byte after string
+                        if pos + 4 + name_len + 2 <= file_size:
+                            candidate_bytes = data[pos+4+name_len:pos+6+name_len]
+                            try:
+                                candidate = struct.unpack('<h', candidate_bytes)[0]
+                                if 1 <= candidate <= 36:
+                                    self.sector_number = candidate
+                                    self.sector_name = sector_name
+                                    return
+                            except struct.error:
+                                pass
+                        # 1-byte before length prefix
+                        if pos >= 5:
+                            candidate = data[pos-5]
+                            if 1 <= candidate <= 36:
+                                self.sector_number = candidate
+                                self.sector_name = sector_name
+                                return
+                        # 1-byte after string
+                        if pos + 4 + name_len + 1 <= file_size:
+                            candidate = data[pos+4+name_len]
+                            if 1 <= candidate <= 36:
+                                self.sector_number = candidate
+                                self.sector_name = sector_name
+                                return
+                # Move to next occurrence
+                pos = data.find(name_bytes, pos + 1)
+        
+        # If we get here, we didn't find sector info with the above method
+        # Fallback: set to unknown
+        self.sector_number = 0
+        self.sector_name = ""
+    
     def _parse_multiverse(self, f):
         """Parse Multiverse mod save format"""
         # Stats
@@ -335,6 +449,8 @@ class FtlSaveFile:
             'save_modifier': self.save_modifier,
             'invalid': self.invalid_file,
             'is_profile': self.is_profile,
+            'sector_number': self.sector_number,
+            'sector_name': self.sector_name,
         }
     
     def find_resource_offset(self) -> Optional[int]:
